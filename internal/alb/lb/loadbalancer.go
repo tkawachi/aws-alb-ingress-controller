@@ -67,6 +67,7 @@ type loadBalancerConfig struct {
 	IpAddressType  *string
 	SecurityGroups []string
 	Subnets        []string
+	UseExisting    bool
 }
 
 type defaultController struct {
@@ -163,6 +164,9 @@ func (controller *defaultController) ensureLBInstance(ctx context.Context, lbCon
 		return nil, fmt.Errorf("failed to find existing LoadBalancer due to %v", err)
 	}
 	if instance == nil {
+		if lbConfig.UseExisting {
+			return nil, fmt.Errorf("failed to find existing LoadBalancer: %v", lbConfig.Name)
+		}
 		instance, err = controller.newLBInstance(ctx, lbConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create LoadBalancer due to %v", err)
@@ -170,6 +174,9 @@ func (controller *defaultController) ensureLBInstance(ctx context.Context, lbCon
 		return instance, nil
 	}
 	if controller.isLBInstanceNeedRecreation(ctx, instance, lbConfig) {
+		if lbConfig.UseExisting {
+			return nil, fmt.Errorf("Recreation denied when using existing ALB")
+		}
 		instance, err = controller.recreateLBInstance(ctx, instance, lbConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recreate LoadBalancer due to %v", err)
@@ -307,8 +314,17 @@ func (controller *defaultController) buildLBConfig(ctx context.Context, ingress 
 	if err != nil {
 		return nil, err
 	}
+
+	useExisting := ingressAnnos.LoadBalancer.ExistingName != nil
+	var name string
+	if ingressAnnos.LoadBalancer.ExistingName != nil {
+		name = *ingressAnnos.LoadBalancer.ExistingName
+	} else {
+		name = controller.nameTagGen.NameLB(ingress.Namespace, ingress.Name)
+	}
+
 	return &loadBalancerConfig{
-		Name: controller.nameTagGen.NameLB(ingress.Namespace, ingress.Name),
+		Name: name,
 		Tags: lbTags,
 
 		Type:           aws.String(elbv2.LoadBalancerTypeEnumApplication),
@@ -316,6 +332,7 @@ func (controller *defaultController) buildLBConfig(ctx context.Context, ingress 
 		IpAddressType:  ingressAnnos.LoadBalancer.IPAddressType,
 		SecurityGroups: ingressAnnos.LoadBalancer.SecurityGroups,
 		Subnets:        subnets,
+		UseExisting:    useExisting,
 	}, nil
 }
 

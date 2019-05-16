@@ -40,6 +40,7 @@ type Config struct {
 	Scheme        *string
 	IPAddressType *string
 	WebACLId      *string
+	ExistingName  *string
 
 	InboundCidrs   []string
 	Ports          []PortData
@@ -102,6 +103,11 @@ func (lb loadBalancer) Parse(ing parser.AnnotationInterface) (interface{}, error
 	securityGroups := parser.GetStringSliceAnnotation("security-groups", ing)
 	subnets := parser.GetStringSliceAnnotation("subnets", ing)
 
+	existingName, err := parser.GetStringAnnotation("existing-name", ing)
+	if err != nil {
+		existingName = nil
+	}
+
 	cidrs, err := parseCidrs(ing)
 	if err != nil {
 		return nil, err
@@ -118,6 +124,7 @@ func (lb loadBalancer) Parse(ing parser.AnnotationInterface) (interface{}, error
 
 		Subnets:        subnets,
 		SecurityGroups: securityGroups,
+		ExistingName:   existingName,
 	}, nil
 }
 
